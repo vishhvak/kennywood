@@ -1,0 +1,43 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  # Refresh Queue-Times waits every 5 minutes during Fall Fest hours (Fri-Sun, about 11 AM to midnight ET)
+  schedule:
+    - cron: '*/5 15-23 * * 5,6,0'
+    - cron: '*/5 0-4 * * 6,0,1'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build site with current waits
+        run: |
+          mkdir -p _site && cp index.html _site/
+          if curl -sf --max-time 20 -A 'kennywood-navigator (github.com/vishhvak/kennywood)' https://queue-times.com/parks/312/queue_times.json -o waits.json \
+             && python3 -c "import json; json.load(open('waits.json'))"; then
+            mv waits.json _site/waits.json
+          else
+            echo '{"lands":[],"rides":[]}' > _site/waits.json
+          fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
